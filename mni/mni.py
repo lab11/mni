@@ -150,6 +150,9 @@ class MNI:
                 if p.isAlive():
                     runningProcesses.append(p)
 
+            if len(runningProcesses) is 0:
+                break
+
             if len(runningProcesses) < 0.1*totalProcesses:
                 # we have less than 10% of processes left.
                 # give them 10 seconds to finish, or else kill them.

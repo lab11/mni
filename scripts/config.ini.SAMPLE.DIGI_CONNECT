@@ -1,0 +1,13 @@
+[Nodes]
+numNodes: 1
+type: QuantoTestbedMote
+makeCmd: make epic
+
+[Node1]
+id: 1
+ip: 00-40-9d-3d-6b-0a.eecs.umich.edu
+serial: /dev/ttysb00
+installCmd: make epic reinstall,$id digi bsl,$serial
+timeoffset: 0
+
+

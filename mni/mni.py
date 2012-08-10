@@ -1,3 +1,5 @@
+# vim: ts=4 et sw=4 sts=4
+
 import os
 import sys
 import ConfigParser
@@ -62,25 +64,36 @@ class MNI:
             # Verify presence of required options for current node.
             if not self.config.has_section(nodeString):
                 raise ConfigParser.NoSectionError, "["+nodeString+"]"
-            self._verify_required_options(nodeString, attributes)
 
-            # Set required options for the current node.
-            configuration = {}
-            for a in attributes:
-                configuration[a] = self.config.get(nodeString, a)
-
-            n = nodeType()
             configured = False
+            n = nodeType()
             try:
-                n.configure(configuration)
+                # We allow nodes with flexible configurations (e.g. Quanto's)
+                # to parse their config section themselves as they do not have
+                # a fixed list of required sections, rather a set of allowable
+                # sections. Nodes without an _ex method will default to the
+                # legacy method
+                n.configure_ex(nodeString, self.config)
                 configured = True
-            except KeyError, e:
-                if addIgnore:
-                    print "Node:", nodeString," is not connected. Adding anyway"
-                    self.nodes.append(n)
-                else:
-                    # Node does not exist, print an error
-                    print "Node:", nodeString," is not connected. Ignoring"
+            except AttributeError:
+                self._verify_required_options(nodeString, attributes)
+
+                # Set required options for the current node.
+                configuration = {}
+                for a in attributes:
+                    configuration[a] = self.config.get(nodeString, a)
+
+                try:
+                    n.configure(configuration)
+                    configured = True
+                except KeyError, e:
+                    if addIgnore:
+                        print "Node:", nodeString," is not connected. Adding anyway"
+                        self.nodes.append(n)
+                    else:
+                        # Node does not exist, print an error
+                        print "Node:", nodeString," is not connected. Ignoring"
+
             if configured:
                 self.nodes.append(n)
 

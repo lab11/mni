@@ -1,3 +1,5 @@
+# vim: ts=4 et sw=4 sts=4
+
 import os
 import sys
 import rci
@@ -114,6 +116,25 @@ class TelosMote(Node):
 
 class QuantoTestbedMote(Node):
 
+    # The better way might have been to move this configuration information to
+    # an external file, but it should be a static property of all Quanto motes,
+    # and thus an inherent property of being a Quanto.
+
+    DEFAULT_INSTALL_COMMAND = "make epic reinstall,$id digi bsl,$serial"
+    DEFAULT_TIMEOFFSET = 0
+    NODES = {
+            "rd":"00:40:9d:3d:6c:31",
+            "re":"00:40:9d:3d:69:ed",
+            "rg":"00:40:9d:3d:6c:21",
+            "rk":"00:40:9d:3d:6c:16",
+            "rl":"00:40:9d:3d:6a:29",
+            "rm":"00:40:9d:3d:6a:d5",
+            "rs":"00:40:9d:3d:6a:d1",
+            "rv":"00:40:9d:3d:6c:20",
+            "rw":"00:40:9d:38:24:90",
+            "sb":"00:40:9d:3d:6b:0a"
+    }
+
     def __init__(self):
         Node.__init__(self)
         self.installSuccess = False
@@ -122,27 +143,33 @@ class QuantoTestbedMote(Node):
         self.alwaysOffStates = []
         self.alwaysOnStates = []
 
-    def configure(self, configuration):
-        Node.configure(self, configuration)
+    # Propogates KeyError on failure
+    def get_node_info_by_name(self, name):
+        # I believe the Digi namespace is solid?
+        serial = "/dev/tty" + name + "00"
 
-        for a in QuantoTestbedMote.get_required_attributes():
-            if a not in configuration.keys():
-                raise KeyError, "Configuration must include key '%s'"%(a,)
-        ip = configuration["ip"]
-        serial = configuration["serial"]
-        installCmd = configuration["installCmd"]
-        self.timeoffset = int(configuration["timeoffset"])
+        # Will raise KeyError if unknown node
+        mac = self.NODES[name]
+        host = mac.replace(":", "-") + ".eecs.umich.edu"
 
+        # Generate a consistent, unique id as a courtesy
+        k = self.NODES.keys()
+        k.sort()
+        id = k.index(name) + 1
+
+        return id, host, serial
+
+    def _verify_config(self, host, serial, installCmd):
         # check if we can telnet to the IP
-        self.ip = ip
+        self.host = host
 
         try:
             t = telnetlib.Telnet()
-            t.open(ip)
+            t.open(host)
             t.read_until("login: ", timeout=1)
             t.close()
         except socket.error:
-            raise ValueError, "ERROR: Could not connect to node with IP %s\n"%(self.ip,)
+            raise ValueError, "ERROR: Could not connect to node at %s\n"%(self.host,)
 
         self.serial = serial
         if not os.path.exists(self.serial):
@@ -152,8 +179,52 @@ class QuantoTestbedMote(Node):
         self.installCmd = template.substitute(serial = self.serial, id=self.id)
 
         # add the RCI interface
-        self.rci = rci.RCI(self.ip)
+        self.rci = rci.RCI(self.host)
 
+    def configure_ex(self, key, config):
+        if config.has_option(key, "name"):
+            try:
+                name = config.get(key, "name")
+                id, host, serial = self.get_node_info_by_name(name)
+
+            except KeyError:
+                print "WARN: Error parsing node with name ", name
+                print "      Failing over to default configure path"
+                print
+                print "You may need to add this node to the NODES array in the"
+                print "QuantoTestbedMote class if it is a new node"
+                raise AttributeError
+
+            # Allow override from config file
+            host = config.get(key,"ip") if config.has_option(key,"ip") else host
+            serial = config.get(key,"serial") if config.has_option(key,"serial") else serial
+            installCmd = config.get(key,"installCmd") if config.has_option(key,"installCmd") else self.DEFAULT_INSTALL_COMMAND
+            self.timeoffset = config.get(key,"timeoffset") if config.has_option(key,"timeoffset") else self.DEFAULT_TIMEOFFSET
+
+            # Set a unique id as a courtesy as it is common to all Node types
+            if not config.has_option(key,"id"):
+                config.set(key, "id", id)
+
+            self.id = config.get(key, "id")
+
+            self._verify_config(host, serial, installCmd)
+        else:
+            # Raising AttributeError falls back to standard configure path
+            raise AttributeError
+
+    def configure(self, configuration):
+        Node.configure(self, configuration)
+
+        for a in QuantoTestbedMote.get_required_attributes():
+            if a not in configuration.keys():
+                raise KeyError, "Configuration must include key '%s'"%(a,)
+        # rename to more appropriate term 'host' as ip or hostname both work
+        host = configuration["ip"]
+        serial = configuration["serial"]
+        installCmd = configuration["installCmd"]
+        self.timeoffset = int(configuration["timeoffset"])
+
+        self._verify_config(host, serial, installCmd)
 
     def install(self):
 

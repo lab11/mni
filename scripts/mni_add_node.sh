@@ -15,10 +15,33 @@ while true; do
 done
 
 set -x
-sudo /usr/bin/dgrp/config/dgrp_cfg_node init -v -v -e never $NODE_NAME $NODE_IP 1 > /dev/null
-sudo chgrp dialout "/dev/tty"$NODE_NAME"00"
-sudo chmod g+rwx "/dev/tty"$NODE_NAME"00"
+sudo /usr/bin/dgrp/config/dgrp_cfg_node init -v -v -e never $NODE_NAME $NODE_IP 1 > /dev/null && sleep 1
 set +x
+TTY_NAME="/dev/tty/${NODE_NAME}00"
+if [ -e "$TTY_NAME" ]; then
+	if ! [[ -r "$TTY_NAME" && -w "$TTY_NAME" ]]; then
+		echo "ERR: Current user does not have read/write permissions"
+		echo "on $TTY_NAME"
+		echo "Consider fixing your udev rule by appending:"
+		echo -e '\tGROUP="dialout'
+		echo "Also ensure that the current user is a member of the"
+		echo "dailout group (or any other group of your choice)"
+		echo
+		read -p "Would you like to fixup $TTY_NAME now? [Y/n]" resp
+		if [ echo ${resp:0:1} | tr [:lower:] [:upper:] == "N" ]; then
+			echo "WARN: You will need to fix this before attempting to use this node"
+			echo "Continuing on..."
+		else
+			set -x
+			sudo chgrp dialout "$TTY_NAME"
+			sudo chmod g+rwx "$TTY_NAME"
+			set +x
+		fi
+	fi
+else
+	echo "ERR: Device $TTY_NAME was not created"
+	exit 1
+fi
 
 if [ -w "config.ini" ]; then
 	while true; do

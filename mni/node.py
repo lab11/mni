@@ -173,7 +173,9 @@ class QuantoTestbedMote(Node):
 
         self.serial = serial
         if not os.path.exists(self.serial):
-            raise ValueError, "ERROR: Serial port %s does not exist\n"%(self.serial,)
+            msg =  "ERROR: Serial port %s does not exist\n"%(self.serial,)
+            msg += "       If this is a new mote, run mni_add_node"
+            raise ValueError, msg
 
         template = Template(installCmd)
         self.installCmd = template.substitute(serial = self.serial, id=self.id)
